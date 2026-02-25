@@ -1,15 +1,27 @@
-use atomic_id::{x64, AtomicId};
+use std::sync::atomic::AtomicU64;
 
-struct VectorNode {
+pub struct VectorNode {
     id: u64,
     vector: Vec<f32>,
 }
 
-pub fn new_vector_node(vector: Vec<f32>) -> VectorNode {
-    let id = AtomicId::<u64>::new();
-    return VectorNode { id, vector };
-}
+static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-pub fn new_vector_node_with_id(vector: Vec<f32>, id: u64) -> VectorNode {
-    return VectorNode { id, vector };
+impl VectorNode {
+    pub fn new_vector_node(vector: Vec<f32>) -> VectorNode {
+        let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return VectorNode { id, vector };
+    }
+
+    pub fn new_vector_node_with_id(vector: Vec<f32>, id: u64) -> VectorNode {
+        return VectorNode { id, vector };
+    }
+
+    pub fn get_vector(&self) -> &Vec<f32> {
+        return &self.vector;
+    }
+
+    pub fn get_id(&self) -> u64 {
+        return self.id;
+    }
 }
