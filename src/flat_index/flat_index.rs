@@ -138,5 +138,5 @@ fn euclidean_distance(a: &Vec<f32>, b: &Vec<f32>) -> f32 {
 }
 
 fn cosine_similarity(a: &Vec<f32>, b: &Vec<f32>) -> f32 {
-    return a.iter().zip(b.iter()).map(|(a, b)| (b - a).powf(2.0)).sum();
+    return a.iter().zip(b.iter()).map(|(a, b)| a * b).sum();
 }
