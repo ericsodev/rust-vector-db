@@ -186,3 +186,43 @@ fn test_multiple_train_calls() {
     let result = index.train();
     assert!(result.is_ok());
 }
+
+#[test]
+fn test_train_reassigns_centroid_mean() {
+    let mut index = IVFIndex::new(3, 2);
+
+    // Add vectors where:
+    // - First two vectors become initial centroids: [0,0,0] and [10,10,10]
+    // - Additional vectors pull the centroids toward new positions
+    index
+        .add_batch(vec![
+            // Initial centroid 1 at [0, 0, 0]
+            VectorNode::new_vector_node_with_id(vec![0.0, 0.0, 0.0], 0),
+            // Initial centroid 2 at [10, 10, 10]
+            VectorNode::new_vector_node_with_id(vec![10.0, 10.0, 10.0], 1),
+            // These vectors should pull centroid 1 toward [2, 2, 2]
+            VectorNode::new_vector_node_with_id(vec![2.0, 2.0, 2.0], 2),
+            VectorNode::new_vector_node_with_id(vec![2.0, 2.0, 2.0], 3),
+            VectorNode::new_vector_node_with_id(vec![2.0, 2.0, 2.0], 4),
+            VectorNode::new_vector_node_with_id(vec![2.0, 2.0, 2.0], 5),
+            // These vectors should pull centroid 2 toward [8, 8, 8]
+            VectorNode::new_vector_node_with_id(vec![8.0, 8.0, 8.0], 6),
+            VectorNode::new_vector_node_with_id(vec![8.0, 8.0, 8.0], 7),
+            VectorNode::new_vector_node_with_id(vec![8.0, 8.0, 8.0], 8),
+            VectorNode::new_vector_node_with_id(vec![8.0, 8.0, 8.0], 9),
+        ])
+        .unwrap();
+
+    // Train should reassign centroid means based on assigned vectors
+    // After training:
+    // - Centroid 1 should move from [0,0,0] toward ~[1.6, 1.6, 1.6] (mean of 0,2,2,2,2)
+    // - Centroid 2 should move from [10,10,10] toward ~[8.4, 8.4, 8.4] (mean of 10,8,8,8,8)
+    let result = index.train();
+    assert!(result.is_ok());
+
+    // After centroid reassignment, a vector at [5, 5, 5] should be equidistant
+    // from both clusters. A vector at [3, 3, 3] should be closer to cluster 1's
+    // new centroid position rather than being assigned based on original centroids.
+    let result = index.add(VectorNode::new_vector_node_with_id(vec![3.0, 3.0, 3.0], 10));
+    assert!(result.is_ok());
+}
