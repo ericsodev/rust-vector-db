@@ -3,7 +3,10 @@ use std::{
     vec,
 };
 
-use crate::{index::Index, vector::vector::VectorNode};
+use crate::{
+    index::{Index, Searchable},
+    vector::vector::VectorNode,
+};
 
 pub struct IVFIndex {
     dimension: usize,
@@ -69,8 +72,15 @@ impl Index for IVFIndex {
     }
 
     fn train(&mut self) -> Result<(), String> {
+        if self.vectors.len() == 0 {
+            return Ok(());
+        }
+
         self.centroids = get_initial_clusters(&self.vectors, self.num_centroids);
-        assign_vectors_to_cluster(&self.vectors, &mut self.centroids);
+        for _ in 0..20 {
+            assign_vectors_to_cluster(&self.vectors, &mut self.centroids);
+            reassign_cluster_centroid(self);
+        }
 
         Ok(())
     }
@@ -87,6 +97,33 @@ fn get_initial_clusters<'a>(vectors: &HashMap<u64, VectorNode>, num_clusters: u3
         .collect();
 
     centers
+}
+
+fn reassign_cluster_centroid(index: &mut IVFIndex) {
+    for cluster in index.centroids.iter_mut() {
+        let mut mean = vec![0.0; index.dimension];
+        let mut total_vectors = 0;
+        for id in cluster.vectors.iter() {
+            let vec_result = index.vectors.get(&id);
+            if let Some(vec) = vec_result {
+                mean = mean
+                    .iter()
+                    .zip(vec.get_vector().iter())
+                    .map(|(a, b)| *a + *b)
+                    .collect();
+                total_vectors += 1;
+            } else {
+                // Handle gracefully, remove from this centroids
+            }
+        }
+
+        if total_vectors == 0 {
+            cluster.centroid = mean;
+            return;
+        }
+
+        cluster.centroid = mean.iter().map(|a| *a / total_vectors as f32).collect()
+    }
 }
 
 fn assign_vector_to_cluster(index: &mut IVFIndex, vector: &VectorNode) -> bool {
