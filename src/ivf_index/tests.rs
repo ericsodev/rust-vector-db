@@ -1,4 +1,8 @@
-use crate::{index::Index, ivf_index::ivf_index::IVFIndex, vector::vector::VectorNode};
+use crate::{
+    index::{Index, Searchable},
+    ivf_index::ivf_index::IVFIndex,
+    vector::vector::VectorNode,
+};
 
 // =============================================================================
 // Index trait tests
@@ -225,4 +229,215 @@ fn test_train_reassigns_centroid_mean() {
     // new centroid position rather than being assigned based on original centroids.
     let result = index.add(VectorNode::new_vector_node_with_id(vec![3.0, 3.0, 3.0], 10));
     assert!(result.is_ok());
+}
+
+// =============================================================================
+// Searchable trait tests
+// =============================================================================
+
+#[test]
+fn test_search_returns_k_nearest() {
+    let mut index = IVFIndex::new(4, 2);
+
+    index
+        .add_batch(vec![
+            VectorNode::new_vector_node_with_id(vec![1.0, 0.0, 0.0, 0.0], 0),
+            VectorNode::new_vector_node_with_id(vec![2.0, 0.0, 0.0, 0.0], 1),
+            VectorNode::new_vector_node_with_id(vec![10.0, 0.0, 0.0, 0.0], 2),
+            VectorNode::new_vector_node_with_id(vec![100.0, 0.0, 0.0, 0.0], 3),
+        ])
+        .unwrap();
+
+    index.train().unwrap();
+
+    let query = vec![0.0, 0.0, 0.0, 0.0];
+    let results = index.search(&query, 2).unwrap();
+
+    assert_eq!(results.len(), 2);
+    // Closest should be [1.0, 0, 0, 0] (id=0) and [2.0, 0, 0, 0] (id=1)
+    assert_eq!(results[0].get_id(), 0);
+    assert_eq!(results[1].get_id(), 1);
+}
+
+#[test]
+fn test_search_exact_match() {
+    let mut index = IVFIndex::new(3, 2);
+
+    index
+        .add_batch(vec![
+            VectorNode::new_vector_node_with_id(vec![1.0, 2.0, 3.0], 0),
+            VectorNode::new_vector_node_with_id(vec![4.0, 5.0, 6.0], 1),
+            VectorNode::new_vector_node_with_id(vec![7.0, 8.0, 9.0], 2),
+        ])
+        .unwrap();
+
+    index.train().unwrap();
+
+    let query = vec![4.0, 5.0, 6.0]; // Exact match with id=1
+    let results = index.search(&query, 1).unwrap();
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].get_id(), 1);
+}
+
+#[test]
+fn test_search_empty_index() {
+    let index = IVFIndex::new(3, 2);
+
+    let query = vec![1.0, 2.0, 3.0];
+    let results = index.search(&query, 5).unwrap();
+
+    assert_eq!(results.len(), 0);
+}
+
+#[test]
+fn test_search_untrained_index() {
+    let mut index = IVFIndex::new(3, 2);
+
+    // Add vectors but don't train
+    index
+        .add_batch(vec![
+            VectorNode::new_vector_node_with_id(vec![1.0, 2.0, 3.0], 0),
+            VectorNode::new_vector_node_with_id(vec![4.0, 5.0, 6.0], 1),
+        ])
+        .unwrap();
+
+    // Search without training - should return empty since no clusters exist
+    let query = vec![1.0, 2.0, 3.0];
+    let results = index.search(&query, 5).unwrap();
+
+    assert_eq!(results.len(), 0);
+}
+
+#[test]
+fn test_search_k_larger_than_index_size() {
+    let mut index = IVFIndex::new(3, 2);
+
+    index
+        .add_batch(vec![
+            VectorNode::new_vector_node_with_id(vec![1.0, 2.0, 3.0], 0),
+            VectorNode::new_vector_node_with_id(vec![4.0, 5.0, 6.0], 1),
+        ])
+        .unwrap();
+
+    index.train().unwrap();
+
+    let query = vec![0.0, 0.0, 0.0];
+    let results = index.search(&query, 10).unwrap(); // k=10, but only 2 vectors
+
+    // Should return at most 2 results
+    assert!(results.len() <= 2);
+}
+
+#[test]
+fn test_search_finds_vectors_across_clusters() {
+    let mut index = IVFIndex::new(3, 2);
+
+    // Create two distinct clusters
+    index
+        .add_batch(vec![
+            // Cluster 1 near origin
+            VectorNode::new_vector_node_with_id(vec![0.0, 0.0, 0.0], 0),
+            VectorNode::new_vector_node_with_id(vec![0.1, 0.1, 0.1], 1),
+            VectorNode::new_vector_node_with_id(vec![0.2, 0.2, 0.2], 2),
+            // Cluster 2 far from origin
+            VectorNode::new_vector_node_with_id(vec![10.0, 10.0, 10.0], 3),
+            VectorNode::new_vector_node_with_id(vec![10.1, 10.1, 10.1], 4),
+            VectorNode::new_vector_node_with_id(vec![10.2, 10.2, 10.2], 5),
+        ])
+        .unwrap();
+
+    index.train().unwrap();
+
+    // Query near cluster 1
+    let query = vec![0.0, 0.0, 0.0];
+    let results = index.search(&query, 3).unwrap();
+
+    assert_eq!(results.len(), 3);
+    // All results should be from cluster 1 (ids 0, 1, 2)
+    let ids: Vec<u64> = results.iter().map(|v| v.get_id()).collect();
+    assert!(ids.contains(&0));
+    assert!(ids.contains(&1));
+    assert!(ids.contains(&2));
+}
+
+#[test]
+fn test_search_returns_results_in_distance_order() {
+    let mut index = IVFIndex::new(3, 2);
+
+    index
+        .add_batch(vec![
+            VectorNode::new_vector_node_with_id(vec![5.0, 0.0, 0.0], 0),
+            VectorNode::new_vector_node_with_id(vec![1.0, 0.0, 0.0], 1),
+            VectorNode::new_vector_node_with_id(vec![3.0, 0.0, 0.0], 2),
+            VectorNode::new_vector_node_with_id(vec![2.0, 0.0, 0.0], 3),
+            VectorNode::new_vector_node_with_id(vec![4.0, 0.0, 0.0], 4),
+        ])
+        .unwrap();
+
+    index.train().unwrap();
+
+    let query = vec![0.0, 0.0, 0.0];
+    let results = index.search(&query, 5).unwrap();
+
+    assert_eq!(results.len(), 5);
+    // Should be ordered by distance: 1, 3, 2, 4, 0
+    assert_eq!(results[0].get_id(), 1); // distance 1
+    assert_eq!(results[1].get_id(), 3); // distance 2
+    assert_eq!(results[2].get_id(), 2); // distance 3
+    assert_eq!(results[3].get_id(), 4); // distance 4
+    assert_eq!(results[4].get_id(), 0); // distance 5
+}
+
+#[test]
+fn test_search_after_remove() {
+    let mut index = IVFIndex::new(3, 2);
+
+    index
+        .add_batch(vec![
+            VectorNode::new_vector_node_with_id(vec![1.0, 0.0, 0.0], 0),
+            VectorNode::new_vector_node_with_id(vec![2.0, 0.0, 0.0], 1),
+            VectorNode::new_vector_node_with_id(vec![3.0, 0.0, 0.0], 2),
+        ])
+        .unwrap();
+
+    index.train().unwrap();
+
+    // Remove the closest vector
+    index.remove(0).unwrap();
+
+    let query = vec![0.0, 0.0, 0.0];
+    let results = index.search(&query, 2).unwrap();
+
+    assert_eq!(results.len(), 2);
+    // After removing id=0, closest should now be id=1
+    assert_eq!(results[0].get_id(), 1);
+    assert_eq!(results[1].get_id(), 2);
+}
+
+#[test]
+fn test_search_after_adding_post_train() {
+    let mut index = IVFIndex::new(3, 2);
+
+    // Initial vectors and train
+    index
+        .add_batch(vec![
+            VectorNode::new_vector_node_with_id(vec![10.0, 0.0, 0.0], 0),
+            VectorNode::new_vector_node_with_id(vec![20.0, 0.0, 0.0], 1),
+        ])
+        .unwrap();
+
+    index.train().unwrap();
+
+    // Add a new vector after training that's closer to query
+    index
+        .add(VectorNode::new_vector_node_with_id(vec![1.0, 0.0, 0.0], 2))
+        .unwrap();
+
+    let query = vec![0.0, 0.0, 0.0];
+    let results = index.search(&query, 3).unwrap();
+
+    assert_eq!(results.len(), 3);
+    // The newly added vector (id=2) should be closest
+    assert_eq!(results[0].get_id(), 2);
 }
