@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    env,
     fs::{canonicalize, File},
     io::{stdin, BufRead, BufReader},
     path::Path,
@@ -48,10 +49,15 @@ fn load_glove_embeddings(index: &mut IVFIndex, filepath: &str) -> Result<(), std
 fn main() {
     let mut index = IVFIndex::new(GLOVE_DIMENSIONS, 25);
 
-    // let glove_path = "~/Downloads/wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt";
-    let glove_path = shellexpand::full("~/Downloads/wiki_giga_2024_100_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05.050_combined.txt").unwrap();
+    let mut path: String;
 
-    load_glove_embeddings(&mut index, glove_path.as_ref()).unwrap();
+    if let Some(arg) = env::args().nth(1) {
+        path = shellexpand::full(&arg).unwrap().as_ref().to_owned();
+    } else {
+        panic!("Missing user supplied path to GloVe embeddings.")
+    }
+
+    load_glove_embeddings(&mut index, &path).unwrap();
 
     fn lookup_vec_from_word(word: &str, path: &str) -> Option<Vec<f32>> {
         let path = Path::new(path);
@@ -127,7 +133,7 @@ fn main() {
         }
 
         // Lookup glove embedding in file
-        let query_vector = lookup_vec_from_word(&input, glove_path.as_ref());
+        let query_vector = lookup_vec_from_word(&input, &path);
         if let Some(vec) = query_vector {
             let start = Instant::now();
             let result = index.search(&vec, 5).unwrap();
@@ -136,7 +142,7 @@ fn main() {
             println!("Query time taken: {:?}", duration);
 
             let result_ids = result.iter().map(|v| v.get_id());
-            let words_from_result = lookup_word_from_indices(result_ids, &glove_path);
+            let words_from_result = lookup_word_from_indices(result_ids, &path);
 
             for (i, vec) in result.iter().enumerate() {
                 let default = "UNKNOWN WORD".to_string();
@@ -144,7 +150,7 @@ fn main() {
                 println!("Top {}: {}", i, word)
             }
         } else {
-            println!("Word '{input}' is not in dictionary {glove_path}")
+            println!("Word '{input}' is not in dictionary {path}")
         }
     }
 }
