@@ -68,12 +68,39 @@ trait Searchable {
 }
 ```
 
+## Binaries
+
+### GloVe Lookup
+
+An interactive tool for finding similar words using GloVe embeddings and the IVF index.
+
+```bash
+cargo run --bin glove_lookup <path-to-glove-file>
+```
+
+The tool loads [GloVe](https://nlp.stanford.edu/projects/glove/) embeddings (100-dimensional), builds an IVF index with 25 clusters, and then accepts word queries from stdin. For each query, it returns the 5 most similar words.
+
+**Example:**
+
+```bash
+$ cargo run --bin glove_lookup ~/data/glove.6B.100d.txt
+Loaded Glove embeddings
+Training IVF Index
+king
+Query time taken: 1.23ms
+Top 0: king
+Top 1: prince
+Top 2: queen
+Top 3: monarch
+Top 4: kingdom
+```
+
 ## Roadmap
 
 - [x] Flat index with brute-force search
 - [x] Cosine similarity
 - [x] Euclidean distance
-- [ ] IVF (Inverted File Index)
+- [x] IVF (Inverted File Index)
 - [ ] PQ (Product Quantization)
 - [ ] HNSW (Hierarchical Navigable Small World)
 
