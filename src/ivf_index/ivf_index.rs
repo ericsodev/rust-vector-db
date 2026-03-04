@@ -1,12 +1,18 @@
+use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
+    time::Instant,
     vec,
 };
 
 use crate::{
     index::{Index, Searchable},
+    util::euclidean_distance::{self, calculate_euclidean_distance},
     vector::vector::VectorNode,
 };
+
+static NUM_PROBES: usize = 5;
+static NUM_ROUNDS: usize = 10;
 
 pub struct IVFIndex {
     dimension: usize,
@@ -61,6 +67,7 @@ impl Index for IVFIndex {
         }
         Ok(())
     }
+
     fn add(&mut self, vector: VectorNode) -> Result<(), String> {
         if self.dimension != vector.get_vector().len() {
             return Err("Dimension mismatch".to_string());
@@ -77,9 +84,16 @@ impl Index for IVFIndex {
         }
 
         self.centroids = get_initial_clusters(&self.vectors, self.num_centroids);
-        for _ in 0..20 {
+        for i in 0..NUM_ROUNDS {
+            let start = Instant::now();
             assign_vectors_to_cluster(&self.vectors, &mut self.centroids);
             reassign_cluster_centroid(self);
+            println!(
+                "Cluster IVF Round ({}/{}). Took {:?}",
+                i,
+                NUM_ROUNDS,
+                start.elapsed()
+            )
         }
 
         Ok(())
@@ -107,8 +121,8 @@ fn reassign_cluster_centroid(index: &mut IVFIndex) {
             let vec_result = index.vectors.get(&id);
             if let Some(vec) = vec_result {
                 mean = mean
-                    .iter()
-                    .zip(vec.get_vector().iter())
+                    .par_iter()
+                    .zip(vec.get_vector().par_iter())
                     .map(|(a, b)| *a + *b)
                     .collect();
                 total_vectors += 1;
@@ -131,10 +145,10 @@ fn assign_vector_to_cluster(index: &mut IVFIndex, vector: &VectorNode) -> bool {
         return false;
     }
 
-    let mut cluster_distances: Vec<ClusterDistance> = index
+    let mut cluster_distances: Vec<ClusterDistanceMut> = index
         .centroids
         .iter_mut()
-        .map(|v| ClusterDistance {
+        .map(|v| ClusterDistanceMut {
             cluster: v,
             distance: 0.0,
         })
@@ -150,7 +164,7 @@ fn assign_vector_to_cluster(index: &mut IVFIndex, vector: &VectorNode) -> bool {
             .sum::<f32>();
     }
 
-    cluster_distances.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+    cluster_distances.par_sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
 
     cluster_distances
         .first_mut()
@@ -162,8 +176,13 @@ fn assign_vector_to_cluster(index: &mut IVFIndex, vector: &VectorNode) -> bool {
     true
 }
 
-struct ClusterDistance<'a> {
+struct ClusterDistanceMut<'a> {
     cluster: &'a mut Cluster,
+    distance: f32,
+}
+
+struct ClusterDistance<'a> {
+    cluster: &'a Cluster,
     distance: f32,
 }
 
@@ -180,32 +199,89 @@ fn assign_vectors_to_cluster<'a>(
         cluster.vectors.clear();
     }
 
-    let mut cluster_distances: Vec<ClusterDistance<'a>> = clusters
-        .into_iter()
-        .map(|v| ClusterDistance {
-            cluster: v,
-            distance: 0.0,
-        })
-        .collect();
-
-    for vector in vectors.iter() {
-        for cluster in cluster_distances.iter_mut() {
-            cluster.distance = cluster
-                .cluster
-                .centroid
+    let assigned_pairs: Vec<(u64, usize)> = vectors
+        .par_iter()
+        .map(|vector| {
+            let mut cluster_distances: Vec<(usize, f32, &Cluster)> = clusters
                 .iter()
-                .zip(vector.1.get_vector().iter())
-                .map(|(a, b)| (*b - *a).powf(2.0))
-                .sum::<f32>();
+                .enumerate()
+                .map(|(i, v)| (i, 0.0, v))
+                .collect();
+
+            for cluster in cluster_distances.iter_mut() {
+                cluster.1 =
+                    calculate_euclidean_distance(&cluster.2.centroid, vector.1.get_vector());
+            }
+
+            cluster_distances.par_sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+            return (*vector.0, cluster_distances.first().unwrap().0);
+        })
+        .collect::<Vec<(u64, usize)>>();
+
+    // Add to cluster
+    for (vector_id, cluster_idx) in assigned_pairs.iter() {
+        clusters
+            .get_mut(*cluster_idx)
+            .unwrap()
+            .vectors
+            .insert(*vector_id);
+    }
+}
+
+impl Searchable for IVFIndex {
+    fn search(&self, vector: &Vec<f32>, k: u32) -> Result<Vec<&VectorNode>, String> {
+        let mut result = Vec::new();
+
+        // Sort clusters by distance from centroid to vector
+        let mut centroid_distances: Vec<ClusterDistance> = self
+            .centroids
+            .iter()
+            .map(|c| ClusterDistance {
+                cluster: c,
+                distance: c
+                    .centroid
+                    .iter()
+                    .zip(vector.iter())
+                    .map(|(a, b)| (a - b).powf(2.0))
+                    .sum(),
+            })
+            .collect();
+
+        centroid_distances.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+
+        // Collect all vectors in closest NUM_PROBES clusters
+        let mut candidate_vectors: Vec<&VectorNode> = Vec::new();
+        for centroid in centroid_distances.iter().take(NUM_PROBES) {
+            candidate_vectors.extend(
+                centroid
+                    .cluster
+                    .vectors
+                    .iter()
+                    .map(|id| self.vectors.get(id).unwrap())
+                    .collect::<Vec<&VectorNode>>(),
+            );
         }
 
-        cluster_distances.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+        // Sort all candidate vectors by distance to query
+        let mut vector_distances = candidate_vectors
+            .par_iter()
+            .map(|v| {
+                let dist = v
+                    .get_vector()
+                    .iter()
+                    .zip(vector.iter())
+                    .map(|(a, b)| (a - b).powf(2.0))
+                    .sum();
+                (*v, dist)
+            })
+            .collect::<Vec<(&VectorNode, f32)>>();
 
-        cluster_distances
-            .first_mut()
-            .unwrap()
-            .cluster
-            .vectors
-            .insert(*vector.0);
+        vector_distances.par_sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        // Take top k smallest distances
+        result.extend(vector_distances.into_iter().take(k as usize).map(|v| v.0));
+
+        Ok(result)
     }
 }
