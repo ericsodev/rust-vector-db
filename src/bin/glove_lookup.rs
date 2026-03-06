@@ -14,6 +14,7 @@ use rust_vector_db::{
 };
 
 static GLOVE_DIMENSIONS: usize = 100;
+static NUM_CLUSTERS: u32 = 100;
 
 fn load_glove_embeddings(index: &mut IVFIndex, filepath: &str) -> Result<(), std::io::Error> {
     let path = Path::new(&filepath);
@@ -41,15 +42,15 @@ fn load_glove_embeddings(index: &mut IVFIndex, filepath: &str) -> Result<(), std
 
     let _ = index.train().unwrap();
 
-    println!("Training IVF Index");
+    println!("Trained IVF Index");
 
     Ok(())
 }
 
 fn main() {
-    let mut index = IVFIndex::new(GLOVE_DIMENSIONS, 25);
+    let mut index = IVFIndex::new(GLOVE_DIMENSIONS, NUM_CLUSTERS);
 
-    let mut path: String;
+    let path: String;
 
     if let Some(arg) = env::args().nth(1) {
         path = shellexpand::full(&arg).unwrap().as_ref().to_owned();
