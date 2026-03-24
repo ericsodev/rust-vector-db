@@ -7,18 +7,17 @@ use std::{
 
 use crate::{
     index::{Index, Searchable},
-    util::euclidean_distance::{self, calculate_euclidean_distance},
+    util::euclidean_distance::calculate_euclidean_distance,
     vector::vector::VectorNode,
 };
-
-static NUM_PROBES: usize = 5;
-static NUM_ROUNDS: usize = 10;
 
 pub struct IVFIndex {
     dimension: usize,
     num_centroids: u32,
     vectors: HashMap<u64, VectorNode>,
     centroids: Vec<Cluster>,
+    num_probes: u32,
+    num_rounds: u32,
 }
 
 struct Cluster {
@@ -34,17 +33,25 @@ impl Cluster {
 }
 
 impl IVFIndex {
-    pub fn new(dimension: usize, centroids: u32) -> IVFIndex {
+    pub fn new(dimension: usize, centroids: u32, num_probes: u32, num_rounds: u32) -> IVFIndex {
         return IVFIndex {
             dimension,
             num_centroids: centroids,
             centroids: vec![],
             vectors: HashMap::<u64, VectorNode>::new(),
+            num_probes,
+            num_rounds,
         };
     }
 }
 
 impl Index for IVFIndex {
+    fn print_configuration(&self) {
+        println!(
+            "IVFIndex: Dimensions = {}, Centroids = {}",
+            self.dimension, self.num_centroids
+        )
+    }
     fn remove(&mut self, id: u64) -> Result<(), String> {
         self.vectors.remove(&id);
         for c in self.centroids.iter_mut() {
@@ -84,14 +91,14 @@ impl Index for IVFIndex {
         }
 
         self.centroids = get_initial_clusters(&self.vectors, self.num_centroids);
-        for i in 0..NUM_ROUNDS {
+        for i in 0..self.num_rounds {
             let start = Instant::now();
             assign_vectors_to_cluster(&self.vectors, &mut self.centroids);
             reassign_cluster_centroid(self);
             println!(
                 "Cluster IVF Round ({}/{}). Took {:?}",
                 i,
-                NUM_ROUNDS,
+                self.num_rounds,
                 start.elapsed()
             )
         }
@@ -252,7 +259,7 @@ impl Searchable for IVFIndex {
 
         // Collect all vectors in closest NUM_PROBES clusters
         let mut candidate_vectors: Vec<&VectorNode> = Vec::new();
-        for centroid in centroid_distances.iter().take(NUM_PROBES) {
+        for centroid in centroid_distances.iter().take(self.num_probes as usize) {
             candidate_vectors.extend(
                 centroid
                     .cluster

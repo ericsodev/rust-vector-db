@@ -48,7 +48,7 @@ fn load_glove_embeddings(index: &mut IVFIndex, filepath: &str) -> Result<(), std
 }
 
 fn main() {
-    let mut index = IVFIndex::new(GLOVE_DIMENSIONS, NUM_CLUSTERS);
+    let mut index = IVFIndex::new(GLOVE_DIMENSIONS, NUM_CLUSTERS, 5, 10);
 
     let path: String;
 

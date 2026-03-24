@@ -10,7 +10,7 @@ use crate::{
 
 #[test]
 fn test_new_creates_empty_index() {
-    let index = IVFIndex::new(4, 2);
+    let index = IVFIndex::new(4, 2, 5, 10);
     // Index should be created successfully with the specified dimension and centroids
     // We can verify by adding a vector with the correct dimension
     let mut index = index;
@@ -23,14 +23,14 @@ fn test_new_creates_empty_index() {
 
 #[test]
 fn test_train_returns_ok() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
     let result = index.train();
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_train_creates_centroids() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Add vectors before training
     index
@@ -48,7 +48,7 @@ fn test_train_creates_centroids() {
 
 #[test]
 fn test_add_single_vector() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
     let vector = VectorNode::new_vector_node_with_id(vec![1.0, 2.0, 3.0, 4.0], 0);
 
     let result = index.add(vector);
@@ -57,7 +57,7 @@ fn test_add_single_vector() {
 
 #[test]
 fn test_add_rejects_wrong_dimension() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
     let vector = VectorNode::new_vector_node_with_id(vec![1.0, 2.0, 3.0], 0); // 3 dims instead of 4
 
     let result = index.add(vector);
@@ -66,7 +66,7 @@ fn test_add_rejects_wrong_dimension() {
 
 #[test]
 fn test_add_batch_success() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
 
     let result = index.add_batch(vec![
         VectorNode::new_vector_node_with_id(vec![1.0, 2.0, 3.0, 4.0], 0),
@@ -80,7 +80,7 @@ fn test_add_batch_success() {
 
 #[test]
 fn test_add_batch_rejects_wrong_dimension() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
 
     let result = index.add_batch(vec![
         VectorNode::new_vector_node_with_id(vec![1.0, 2.0, 3.0, 4.0], 0),
@@ -92,7 +92,7 @@ fn test_add_batch_rejects_wrong_dimension() {
 
 #[test]
 fn test_remove_existing_vector() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
 
     index
         .add(VectorNode::new_vector_node_with_id(
@@ -107,7 +107,7 @@ fn test_remove_existing_vector() {
 
 #[test]
 fn test_remove_from_empty_index() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
 
     // IVFIndex.remove() always returns Ok, even for non-existent IDs
     let result = index.remove(42);
@@ -120,7 +120,7 @@ fn test_remove_from_empty_index() {
 
 #[test]
 fn test_train_assigns_vectors_to_clusters() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Add vectors that should cluster into two groups
     index
@@ -141,7 +141,7 @@ fn test_train_assigns_vectors_to_clusters() {
 
 #[test]
 fn test_add_after_train_assigns_to_cluster() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Add initial vectors and train
     index
@@ -164,7 +164,7 @@ fn test_add_after_train_assigns_to_cluster() {
 
 #[test]
 fn test_multiple_train_calls() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Add initial vectors
     index
@@ -193,7 +193,7 @@ fn test_multiple_train_calls() {
 
 #[test]
 fn test_train_reassigns_centroid_mean() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Add vectors where:
     // - First two vectors become initial centroids: [0,0,0] and [10,10,10]
@@ -237,7 +237,7 @@ fn test_train_reassigns_centroid_mean() {
 
 #[test]
 fn test_search_returns_k_nearest() {
-    let mut index = IVFIndex::new(4, 2);
+    let mut index = IVFIndex::new(4, 2, 5, 10);
 
     index
         .add_batch(vec![
@@ -261,7 +261,7 @@ fn test_search_returns_k_nearest() {
 
 #[test]
 fn test_search_exact_match() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     index
         .add_batch(vec![
@@ -282,7 +282,7 @@ fn test_search_exact_match() {
 
 #[test]
 fn test_search_empty_index() {
-    let index = IVFIndex::new(3, 2);
+    let index = IVFIndex::new(3, 2, 5, 10);
 
     let query = vec![1.0, 2.0, 3.0];
     let results = index.search(&query, 5).unwrap();
@@ -292,7 +292,7 @@ fn test_search_empty_index() {
 
 #[test]
 fn test_search_untrained_index() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Add vectors but don't train
     index
@@ -311,7 +311,7 @@ fn test_search_untrained_index() {
 
 #[test]
 fn test_search_k_larger_than_index_size() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     index
         .add_batch(vec![
@@ -331,7 +331,7 @@ fn test_search_k_larger_than_index_size() {
 
 #[test]
 fn test_search_finds_vectors_across_clusters() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Create two distinct clusters
     index
@@ -363,7 +363,7 @@ fn test_search_finds_vectors_across_clusters() {
 
 #[test]
 fn test_search_returns_results_in_distance_order() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     index
         .add_batch(vec![
@@ -391,7 +391,7 @@ fn test_search_returns_results_in_distance_order() {
 
 #[test]
 fn test_search_after_remove() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     index
         .add_batch(vec![
@@ -417,7 +417,7 @@ fn test_search_after_remove() {
 
 #[test]
 fn test_search_after_adding_post_train() {
-    let mut index = IVFIndex::new(3, 2);
+    let mut index = IVFIndex::new(3, 2, 5, 10);
 
     // Initial vectors and train
     index
