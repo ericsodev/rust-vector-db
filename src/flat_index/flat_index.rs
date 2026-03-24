@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{index::Searchable, vector::vector::VectorNode};
 
 pub struct FlatIndex {
@@ -6,9 +8,16 @@ pub struct FlatIndex {
     strategy: FlatIndexStrategy,
 }
 
+#[derive(Debug)]
 pub enum FlatIndexStrategy {
     COSINE,
     EUCLIDEAN,
+}
+
+impl Display for FlatIndexStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl FlatIndex {
@@ -22,6 +31,12 @@ impl FlatIndex {
 }
 
 impl crate::index::Index for FlatIndex {
+    fn print_configuration(&self) {
+        println!(
+            "FlatIndex: Dimensions = {}, Strategy = {}",
+            self.dimension, self.strategy
+        )
+    }
     fn train(&mut self) -> Result<(), String> {
         // No training for Flat index
         return Ok(());

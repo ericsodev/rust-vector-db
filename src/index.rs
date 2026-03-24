@@ -5,8 +5,9 @@ pub trait Index {
     fn add(&mut self, vector: VectorNode) -> Result<(), String>;
     fn add_batch(&mut self, vectors: Vec<VectorNode>) -> Result<(), String>;
     fn remove(&mut self, id: u64) -> Result<(), String>;
+    fn print_configuration(&self);
 }
 
-pub trait Searchable {
+pub trait Searchable: Index {
     fn search(&self, vector: &Vec<f32>, k: u32) -> Result<Vec<&VectorNode>, String>;
 }
